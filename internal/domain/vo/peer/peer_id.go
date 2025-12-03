@@ -1,13 +1,22 @@
 package peer
 
-import "github.com/stazoloto/sfu-mediaserver/pkg/id"
+import (
+	"fmt"
 
-type ID string
+	"github.com/stazoloto/sfu-mediaserver/pkg/id"
+)
+
+const (
+	PeerIDMin = 10000000
+	PeerIDMax = 99999999
+)
+
+type ID int64
 
 func NewPeerID() (ID, error) {
-	peerID, err := id.GenerateIDWithPrefix("peer", 10)
+	peerID, err := id.Generate(PeerIDMin, PeerIDMax)
 	if err != nil {
-		return "", err
+		return 0, fmt.Errorf("generate peer ID: %w", err)
 	}
 	return ID(peerID), nil
 }

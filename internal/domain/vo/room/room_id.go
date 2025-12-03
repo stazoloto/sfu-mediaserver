@@ -1,13 +1,23 @@
 package room
 
-import "github.com/stazoloto/sfu-mediaserver/pkg/id"
+import (
+	"fmt"
 
-type ID string
+	"github.com/stazoloto/sfu-mediaserver/pkg/id"
+)
+
+const (
+	RoomIDMin = 10000000000000
+	RoomIDMax = 99999999999999
+)
+
+type ID int64
 
 func NewRoomID() (ID, error) {
-	peerID, err := id.GenerateIDWithPrefix("room", 10)
+	roomID, err := id.Generate(RoomIDMin, RoomIDMax)
 	if err != nil {
-		return "", err
+		return 0, fmt.Errorf("generate room ID: %w", err)
 	}
-	return ID(peerID), nil
+
+	return ID(roomID), nil
 }
