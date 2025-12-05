@@ -8,6 +8,8 @@ import (
 	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/session"
 )
 
+// Session - одно подключение участника.
+// У одного Peer может быть несколько сессий (например, разные устройства)
 type Session struct {
 	ID     session.ID `json:"id"`
 	PeerID peer.ID    `json:"peer_id"`

@@ -6,13 +6,13 @@ import (
 	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/peer"
 )
 
+// Peer - представление пользователя в конкретной комнате
 type Peer struct {
-	ID        peer.ID   `json:"id"`
-	Name      string    `json:"name"`
-	Role      peer.Role `json:"role"`
-	SessionID string    `json:"session_id"`
-	JoinTime  time.Time `json:"join_time"`
-	Metadata  []byte    `json:"metadata"`
+	ID        peer.ID   `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	Role      peer.Role `json:"role" db:"role"` // "member", "owner"
+	SessionID string    `json:"session_id" db:"session_id"`
+	JoinTime  time.Time `json:"join_time" db:"join_time"`
 }
 
 func NewPeer(
@@ -20,7 +20,6 @@ func NewPeer(
 	role peer.Role,
 	sessionID string,
 	joinTime time.Time,
-	metadata []byte,
 ) *Peer {
 	id, err := peer.NewPeerID()
 	if err != nil {
@@ -32,6 +31,5 @@ func NewPeer(
 		Role:      role,
 		SessionID: sessionID,
 		JoinTime:  joinTime,
-		Metadata:  metadata,
 	}
 }

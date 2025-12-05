@@ -3,37 +3,49 @@ package models
 import (
 	"time"
 
+	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/peer"
 	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/room"
 )
 
+// Room - комната
 type Room struct {
 	ID        room.ID           `json:"id"`
-	Name      string            `json:"name"`
+	Name      *string           `json:"name,omitempty"`
+	OwnerID   peer.ID           `json:"owner_id"`
 	Peers     map[string]*Peer  `json:"peers"`
 	Tracks    map[string]*Track `json:"tracks"`
-	Settings  room.Settings     `json:"settings"`
 	CreatedAt time.Time         `json:"created_at"`
 	IsActive  bool              `json:"is_active"`
 }
 
 func NewRoom(
-	name string,
 	peers map[string]*Peer,
 	tracks map[string]*Track,
-	settings room.Settings,
-) *Room {
+) (*Room, error) {
 	id, err := room.NewRoomID()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &Room{
 		ID:        id,
-		Name:      name,
 		Peers:     peers,
 		Tracks:    tracks,
-		Settings:  settings,
 		CreatedAt: time.Now(),
 		IsActive:  true,
+	}, nil
+}
+
+func NewRoomWithName(
+	name string,
+	peers map[string]*Peer,
+	tracks map[string]*Track,
+) (*Room, error) {
+	room, err := NewRoom(peers, tracks)
+	if err != nil {
+		return nil, err
 	}
+
+	room.Name = &name
+	return room, nil
 }

@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	PeerIDMin = 10000000
-	PeerIDMax = 99999999
+	peerIDMin = 10000000
+	peerIDMax = 99999999
 )
 
 type ID int64
 
 func NewPeerID() (ID, error) {
-	peerID, err := id.Generate(PeerIDMin, PeerIDMax)
+	peerID, err := id.Generate(peerIDMin, peerIDMax)
 	if err != nil {
 		return 0, fmt.Errorf("generate peer ID: %w", err)
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/track"
 )
 
-// Track это медиапоток передаваемый от пользователя (аудио, видео, экран)
+// Track - это медиапоток передаваемый от пользователя (аудио, видео, экран)
 type Track struct {
 	ID        track.ID        `json:"id"`
 	PeerID    peer.ID         `json:"peer_id"`
