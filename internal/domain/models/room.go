@@ -15,6 +15,7 @@ type Room struct {
 	Peers     map[string]*Peer  `json:"peers"`
 	Tracks    map[string]*Track `json:"tracks"`
 	CreatedAt time.Time         `json:"created_at"`
+	DeletedAt time.Time         `json:"deleted_at"`
 	IsActive  bool              `json:"is_active"`
 }
 
@@ -26,12 +27,14 @@ func NewRoom(
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 
 	return &Room{
 		ID:        id,
 		Peers:     peers,
 		Tracks:    tracks,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
+		DeletedAt: now.AddDate(0, 1, 0),
 		IsActive:  true,
 	}, nil
 }

@@ -4,32 +4,33 @@ import (
 	"time"
 
 	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/peer"
+	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/room"
 )
 
 // Peer - представление пользователя в конкретной комнате
 type Peer struct {
-	ID        peer.ID   `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
-	Role      peer.Role `json:"role" db:"role"` // "member", "owner"
-	SessionID string    `json:"session_id" db:"session_id"`
-	JoinTime  time.Time `json:"join_time" db:"join_time"`
+	ID       peer.ID   `json:"id"`
+	RoomID   room.ID   `json:"room_id"`
+	Name     string    `json:"name"`
+	Role     peer.Role `json:"role"` // "member", "owner"
+	JoinTime time.Time `json:"join_time"`
 }
 
 func NewPeer(
+	roomID room.ID,
 	name string,
 	role peer.Role,
-	sessionID string,
-	joinTime time.Time,
 ) *Peer {
 	id, err := peer.NewPeerID()
 	if err != nil {
 		panic(err)
 	}
+	now := time.Now()
 	return &Peer{
-		ID:        id,
-		Name:      name,
-		Role:      role,
-		SessionID: sessionID,
-		JoinTime:  joinTime,
+		ID:       id,
+		RoomID:   roomID,
+		Name:     name,
+		Role:     role,
+		JoinTime: now,
 	}
 }
