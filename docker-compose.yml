@@ -1,23 +1,19 @@
 services:
-  redis:
-    image: redis:8.2-alpine
-    container_name: sfu-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+
   postgres:
-    image: postgres:16-alpine
+    image: postgres:14
     container_name: sfu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sfu_db
+      POSTGRES_PASSWORD: sfu_pswrd
+      POSTGRES_USER: sfu_user
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: "Europe/Moscow"
     ports:
       - "5432:5432"
-    restart: always
-    environment:
-      POSTGRES_DB: calendar
-      POSTGRES_USER: calendar_user
-      POSTGRES_PASSWORD: calendar_password
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
 
 
