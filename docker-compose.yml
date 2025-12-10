@@ -1,13 +1,23 @@
 services:
 
+  redis:
+    image: redis:8.4
+    container_name: sfu-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_USER: ${REDIS_USER}
+      REDIS_USER_PASSWORD: ${REDIS_USER_PASSWORD}
+    ports:
+      - "6379:6379"
+
   postgres:
     image: postgres:14
     container_name: sfu-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: sfu_db
-      POSTGRES_PASSWORD: sfu_pswrd
-      POSTGRES_USER: sfu_user
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
       TZ: "Europe/Moscow"
     ports:

@@ -41,8 +41,12 @@ CREATE TABLE peer_connections (
     ),
     peer_id NOT NULL INTEGER REFERENCES peers(id) ON DELETE CASCADE,
     room_id NOT NULL BIGINT REFERENCES rooms(id) ON DELETE CASCADE,
-    signaling_state SMALLINT,
-    ice_state SMALLINT,
-    
+    signaling_state VARCHAR(50) NOT NULL,
+    ice_state VARCHAR(50) NOT NULL,
+    connection_state VARCHAR(50) NOT NULL,
+    gathering_state VARCHAR(50) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    connected_at TIMESTAMPTZ NULL,
+    last_activity TIMESTAMPTZ NOT NULL
 )
 
