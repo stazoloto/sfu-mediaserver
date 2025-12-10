@@ -16,12 +16,14 @@ type PeerConnection struct {
 	Connection       *webrtc.PeerConnection                   `json:"-"` // Основное соединение
 	PublishedTracks  map[track.ID]*webrtc.TrackRemote         ``         // Что пользователь публикует
 	SubscribedTracks map[track.ID]*webrtc.TrackLocalStaticRTP // Что пользователь получает
-	DataChannels     map[string]*webrtc.DataChannel           `json:"-"` // По ключу: "chat", "control", "sync"
-	SignalingState   webrtc.SignalingState                    `json:"signaling_state"`
-	ICEState         webrtc.ICEConnectionState                `json:"ice_state"`
-	ConnectionState  webrtc.PeerConnectionState               `json:"connection_state"`
-	GatheringState   webrtc.ICEGathererState                  `json:"gathering_state"`
+	DataChannels     map[string]*webrtc.DataChannel           `json:"-"`                // По ключу: "chat", "control", "sync"
+	SignalingState   webrtc.SignalingState                    `json:"signaling_state"`  // Состояние переговоров
+	ICEState         webrtc.ICEConnectionState                `json:"ice_state"`        // Состояние сетевого соединения
+	ConnectionState  webrtc.PeerConnectionState               `json:"connection_state"` // Общее состояние
+	GatheringState   webrtc.ICEGathererState                  `json:"gathering_state"`  // состояние сбора ICE-кандидатов
 	CreatedAt        time.Time                                `json:"created_at"`
 	ConnectedAt      *time.Time                               `json:"connected_at,omitempty"`
-	LastActivite     time.Time                                `json:"last_activity"`
+	LastActivity     time.Time                                `json:"last_activity"`
 }
+
+func NewPeerConnection()
