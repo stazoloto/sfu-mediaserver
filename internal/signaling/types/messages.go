@@ -41,6 +41,7 @@ type AnswerPayload struct {
 	To   string `json:"to"`
 }
 
+// ICE кандидат
 type ICECandidate struct {
 	Candidate     string `json:"candidate"`
 	SDPMLineIndex int    `json:"sdpMLineIndex"` // Индекс медиа-потока
