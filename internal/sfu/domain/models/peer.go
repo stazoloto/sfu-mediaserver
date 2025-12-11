@@ -3,17 +3,19 @@ package models
 import (
 	"time"
 
-	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/peer"
-	"github.com/stazoloto/sfu-mediaserver/internal/domain/vo/room"
+	"github.com/gorilla/websocket"
+	"github.com/stazoloto/sfu-mediaserver/internal/sfu/domain/vo/peer"
+	"github.com/stazoloto/sfu-mediaserver/internal/sfu/domain/vo/room"
 )
 
 // Peer - представление пользователя в конкретной комнате
 type Peer struct {
-	ID       peer.ID   `json:"id"`
-	RoomID   room.ID   `json:"room_id"`
-	Name     string    `json:"name"`
-	Role     peer.Role `json:"role"` // "member", "owner"
-	JoinTime time.Time `json:"join_time"`
+	ID       peer.ID          `json:"id"`
+	RoomID   room.ID          `json:"room_id"`
+	Name     string           `json:"name"`
+	Role     peer.Role        `json:"role"` // "member", "owner"
+	Conn     *WebsocketClient `json:"-"`
+	JoinTime time.Time        `json:"join_time"`
 }
 
 func NewPeer(

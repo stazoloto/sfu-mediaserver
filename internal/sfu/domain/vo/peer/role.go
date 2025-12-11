@@ -4,7 +4,6 @@ package peer
 type Role string
 
 const (
-	RoleHost     Role = "host"
-	RoleListener Role = "listener"
-	RoleSpeaker  Role = "speaker"
+	RoleOwner  Role = "owner"
+	RoleMember Role = "member"
 )
