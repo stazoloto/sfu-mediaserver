@@ -57,30 +57,32 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("ws read error:", err)
-			return
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				log.Println("ws closed:", clientID)
+				return
+			}
 		}
 
-		if h.controller == nil {
-			continue
-		}
-
-		if err := h.controller.Handle(data); err != nil {
-			log.Println("controller error:", err)
+		if h.controller != nil {
+			if err := h.controller.Handle(data); err != nil {
+				log.Println("controller error:", err)
+			}
 		}
 	}
 }
 
 func (h *Hub) register(clientID string, conn *websocket.Conn) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.clients[clientID] = conn
+	log.Println("WS CONNECT:", clientID)
+	h.mu.Unlock()
 }
 
 func (h *Hub) unregister(clientID string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	delete(h.clients, clientID)
+	log.Println("WS DISCONNECT:", clientID)
+	h.mu.Unlock()
 }
 
 // Send отправляет raw JSON конкретному клиенту

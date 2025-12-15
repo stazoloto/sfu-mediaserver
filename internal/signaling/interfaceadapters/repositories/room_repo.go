@@ -6,19 +6,19 @@ import (
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/entities"
 )
 
-type MemoryRoomRepo struct {
+type RoomRepo struct {
 	mu    sync.RWMutex
 	rooms map[string]*entities.Room
 }
 
-func NewMemoryRoomRepo() *MemoryRoomRepo {
-	return &MemoryRoomRepo{
+func NewRoomRepo() *RoomRepo {
+	return &RoomRepo{
 		mu:    sync.RWMutex{},
 		rooms: make(map[string]*entities.Room),
 	}
 }
 
-func (r *MemoryRoomRepo) GetOrCreate(id string) (*entities.Room, error) {
+func (r *RoomRepo) GetOrCreate(id string) (*entities.Room, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -30,17 +30,23 @@ func (r *MemoryRoomRepo) GetOrCreate(id string) (*entities.Room, error) {
 	return room, nil
 }
 
-func (r *MemoryRoomRepo) Get(id string) (*entities.Room, error) {
+func (r *RoomRepo) Get(id string) (*entities.Room, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.rooms[id], nil
 }
 
-func (r *MemoryRoomRepo) Save(room *entities.Room) error {
+func (r *RoomRepo) GetAll() map[string]*entities.Room {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.rooms
+}
+
+func (r *RoomRepo) Save(room *entities.Room) error {
 	return nil
 }
 
-func (r *MemoryRoomRepo) DeleteIfEmpty(id string) error {
+func (r *RoomRepo) DeleteIfEmpty(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -6,6 +6,14 @@ import (
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/entities"
 )
 
+var (
+	ErrMissingRoom     = errors.New("missing room")
+	ErrMissingClientID = errors.New("missing client")
+	ErrMissingFrom     = errors.New("missing from")
+	ErrMissingTo       = errors.New("missing to")
+	ErrSamePeer        = errors.New("from and to must be different")
+)
+
 type Interactor struct {
 	rooms RoomRepository
 	out   ClientGateway
@@ -32,6 +40,13 @@ func (i *Interactor) Handle(msg entities.Message) error {
 }
 
 func (i *Interactor) join(msg entities.Message) error {
+	if msg.Room == "" {
+		return ErrMissingRoom
+	}
+	if msg.ClientID == "" {
+		return ErrMissingClientID
+	}
+
 	room, err := i.rooms.GetOrCreate(msg.Room)
 	if err != nil {
 		return err
@@ -40,13 +55,27 @@ func (i *Interactor) join(msg entities.Message) error {
 	room.Clients[msg.ClientID] = &entities.Client{ID: msg.ClientID}
 	_ = i.rooms.Save(room)
 
-	return i.out.Broadcast(room.ID, entities.Message{
-		Type:    entities.TypeJoin,
-		Room:    room.ID,
-		Payload: serializePeers(room)})
+	peersPayload := serializePeers(room)
+
+	for clientID := range room.Clients {
+		i.out.Send(clientID, entities.Message{
+			Type:    entities.TypePeers,
+			Room:    room.ID,
+			Payload: peersPayload,
+		})
+
+	}
+	return nil
 }
 
 func (i *Interactor) Leave(msg entities.Message) error {
+	if msg.Room == "" {
+		return ErrMissingRoom
+	}
+
+	if msg.ClientID == "" {
+		return ErrMissingClientID
+	}
 	room, err := i.rooms.GetOrCreate(msg.Room)
 	if err != nil {
 		return err
@@ -56,16 +85,32 @@ func (i *Interactor) Leave(msg entities.Message) error {
 	_ = i.rooms.Save(room)
 	_ = i.rooms.DeleteIfEmpty(room.ID)
 
-	return i.out.Broadcast(room.ID, entities.Message{
+	return i.out.Send(room.ID, entities.Message{
 		Type:    entities.TypeLeave,
 		Room:    room.ID,
 		Payload: serializePeers(room),
 	})
 }
 
-func (i *Interactor) relay(msg entities.Message) error {
-	if msg.To == "" {
-		return errors.New("missing recipient")
+func (i *Interactor) Disconnect(clientID string) {
+	rooms := i.rooms.GetAll()
+
+	for room := range rooms {
+
 	}
-	return i.out.Broadcast(msg.To, msg)
+
+}
+
+func (i *Interactor) relay(msg entities.Message) error {
+	if msg.From == "" {
+		return ErrMissingFrom
+	}
+	if msg.To == "" {
+		return ErrMissingTo
+	}
+
+	if msg.To == msg.From {
+		return ErrSamePeer
+	}
+	return i.out.Send(msg.To, msg)
 }

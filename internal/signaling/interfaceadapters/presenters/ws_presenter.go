@@ -30,13 +30,6 @@ func (p *WSPresenter) Send(clientID string, msg entities.Message) error {
 	return p.sender.Send(clientID, data)
 }
 
-func (p *WSPresenter) Broadcast(roomID string, msg entities.Message) error {
-	// roomID use case уже разрешил → presenter просто отправляет
-	// broadcast обычно вызывается по списку клиентов, но
-	// если твой use case реально передаёт roomID — см. примечание ниже
-	return nil
-}
-
 func (p *WSPresenter) encode(msg entities.Message) ([]byte, error) {
 	dto := map[string]any{
 		"type": msg.Type,
