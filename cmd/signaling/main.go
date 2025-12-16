@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	roomRepo := repositories.NewMemoryRoomRepo()
+	roomRepo := repositories.NewRoomRepo()
 	hub := ws.NewHub()
 	presenter := presenters.NewWSPresenter(hub)
 
@@ -20,6 +20,7 @@ func main() {
 	controller := controllers.NewWSController(interactor)
 	hub.SetController(controller)
 
+	hub.SetOnDisconnect(interactor.Disconnect)
 	http.Handle("/ws", hub)
 
 	log.Println("server started on :8080")

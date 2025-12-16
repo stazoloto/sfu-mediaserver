@@ -8,7 +8,7 @@ import (
 )
 
 func TestJoinRoomAndPeers(t *testing.T) {
-	roomRepo := repositories.NewMemoryRoomRepo()
+	roomRepo := repositories.NewRoomRepo()
 	gateway := NewMockClientGateway()
 
 	uc := NewInteractor(roomRepo, gateway)
@@ -64,7 +64,7 @@ func TestJoinRoomAndPeers(t *testing.T) {
 }
 
 func TestJoinWithoutRoom(t *testing.T) {
-	repo := repositories.NewMemoryRoomRepo()
+	repo := repositories.NewRoomRepo()
 	gateway := NewMockClientGateway()
 
 	uc := NewInteractor(repo, gateway)

@@ -95,8 +95,30 @@ func (i *Interactor) Leave(msg entities.Message) error {
 func (i *Interactor) Disconnect(clientID string) {
 	rooms := i.rooms.GetAll()
 
-	for room := range rooms {
+	// Если клиента в комнате нет, пропуск
+	for _, room := range rooms {
+		if _, ok := room.Clients[clientID]; !ok {
+			continue
+		}
 
+		delete(room.Clients, clientID)
+		_ = i.rooms.Save(room)
+
+		// комната опустела - удалить комнату
+		if len(room.Clients) == 0 {
+			_ = i.rooms.DeleteIfEmpty(room.ID)
+			continue
+		}
+
+		peers := serializePeers(room)
+
+		for peerID := range room.Clients {
+			_ = i.out.Send(peerID, entities.Message{
+				Type:    entities.TypePeers,
+				Room:    room.ID,
+				Payload: peers,
+			})
+		}
 	}
 
 }

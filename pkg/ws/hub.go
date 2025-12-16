@@ -14,7 +14,8 @@ type Hub struct {
 	mu      sync.RWMutex
 	clients map[string]*websocket.Conn // clientID -> conn
 
-	controller Controller
+	controller   Controller
+	onDisconnect func(clientID string)
 }
 
 // NewHub создаёт WebSocket hub
@@ -59,8 +60,14 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				log.Println("ws closed:", clientID)
-				return
+			} else {
+				log.Println("wa read error:", err)
 			}
+
+			if h.onDisconnect != nil {
+				h.onDisconnect(clientID)
+			}
+			return
 		}
 
 		if h.controller != nil {
@@ -98,9 +105,6 @@ func (h *Hub) Send(clientID string, data []byte) error {
 	return conn.WriteMessage(websocket.TextMessage, data)
 }
 
-// Broadcast отправляет сообщение нескольким клиентам
-func (h *Hub) Broadcast(clientIDs []string, data []byte) {
-	for _, id := range clientIDs {
-		_ = h.Send(id, data)
-	}
+func (h *Hub) SetOnDisconnect(fn func(string)) {
+	h.onDisconnect = fn
 }

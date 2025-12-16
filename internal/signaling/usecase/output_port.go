@@ -5,7 +5,7 @@ import "github.com/stazoloto/sfu-mediaserver/internal/signaling/entities"
 type RoomRepository interface {
 	GetOrCreate(roomID string) (*entities.Room, error)
 	Get(roomID string) (*entities.Room, error)
-	GetAll() map[string]*entities.Room
+	GetAll() []*entities.Room
 	Save(room *entities.Room) error
 	DeleteIfEmpty(roomID string) error
 }

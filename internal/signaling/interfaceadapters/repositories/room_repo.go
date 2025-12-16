@@ -36,10 +36,16 @@ func (r *RoomRepo) Get(id string) (*entities.Room, error) {
 	return r.rooms[id], nil
 }
 
-func (r *RoomRepo) GetAll() map[string]*entities.Room {
+func (r *RoomRepo) GetAll() []*entities.Room {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.rooms
+
+	rooms := make([]*entities.Room, 0, len(r.rooms))
+	for _, room := range r.rooms {
+		rooms = append(rooms, room)
+	}
+
+	return rooms
 }
 
 func (r *RoomRepo) Save(room *entities.Room) error {
