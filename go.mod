@@ -2,10 +2,11 @@ module github.com/stazoloto/sfu-mediaserver
 
 go 1.25.4
 
+require github.com/gorilla/websocket v1.5.3
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/uuid v1.3.1 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/pion/datachannel v1.5.8 // indirect
 	github.com/pion/dtls/v2 v2.2.12 // indirect
 	github.com/pion/ice/v2 v2.3.38 // indirect
