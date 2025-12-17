@@ -30,11 +30,13 @@ func (c *WSController) Handle(raw []byte) error {
 		return err
 	}
 
-	return c.input.Handle(entities.Message{
+	err := c.input.Handle(entities.Message{
 		Type:     entities.MessageType(dto.Type),
 		Room:     dto.Room,
 		From:     dto.From,
 		To:       dto.To,
 		ClientID: dto.ClientID,
 		Payload:  dto.Payload})
+
+	return err
 }

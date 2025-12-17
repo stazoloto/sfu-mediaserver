@@ -1,8 +1,11 @@
 package usecase
 
 import (
+	"encoding/json"
 	"errors"
 
+	"github.com/pion/webrtc/v3"
+	"github.com/stazoloto/sfu-mediaserver/internal/sfu"
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/entities"
 )
 
@@ -17,13 +20,19 @@ var (
 type Interactor struct {
 	rooms RoomRepository
 	out   ClientGateway
+
+	sfu *sfu.SFU
 }
 
-func NewInteractor(repo RoomRepository, out ClientGateway) *Interactor {
-	return &Interactor{
+func NewInteractor(repo RoomRepository, out ClientGateway, sfu *sfu.SFU) *Interactor {
+	i := &Interactor{
 		rooms: repo,
 		out:   out,
+		sfu:   sfu,
 	}
+
+	sfu.OnICECandidate(i.handleSFUICE)
+	return i
 }
 
 func (i *Interactor) Handle(msg entities.Message) error {
@@ -37,6 +46,90 @@ func (i *Interactor) Handle(msg entities.Message) error {
 	default:
 		return errors.New("unknown message type")
 	}
+}
+
+func (i *Interactor) HandleSFU(msg entities.Message) error {
+	switch msg.Type {
+	case entities.TypeOffer:
+		return i.handleSFUOffer(msg)
+	case entities.TypeCandidate:
+		return i.handleSFUCandidate(msg)
+	default:
+		return nil
+	}
+}
+
+func (i *Interactor) handleSFUOffer(msg entities.Message) error {
+	if msg.Room == "" {
+		return ErrMissingRoom
+	}
+
+	// парсинг SDP offer
+	var offer webrtc.SessionDescription
+	if err := json.Unmarshal(msg.Payload, &offer); err != nil {
+		return err
+	}
+
+	// получить или созать peer в SFU
+	peer, err := i.sfu.Join(msg.Room, msg.ClientID)
+	if err != nil {
+		return err
+	}
+
+	// установить remote description
+	if err := peer.PC.SetRemoteDescription(offer); err != nil {
+		return err
+	}
+
+	// создание answer
+	answer, err := peer.PC.CreateAnswer(nil)
+	if err != nil {
+		return err
+	}
+
+	// установить local description
+	if err := peer.PC.SetLocalDescription(answer); err != nil {
+		return err
+	}
+
+	// отправка answer клиенту
+	answerBytes, _ := json.Marshal(answer)
+
+	return i.out.Send(msg.From, entities.Message{
+		Type:    entities.TypeAnswer,
+		From:    "sfu",
+		To:      msg.From,
+		Room:    msg.Room,
+		Payload: answerBytes,
+	})
+
+}
+
+func (i *Interactor) handleSFUCandidate(msg entities.Message) error {
+	peer := i.sfu.GetPeer(msg.Room, msg.From)
+	if peer == nil {
+		return nil
+	}
+
+	var c webrtc.ICECandidateInit
+	if err := json.Unmarshal(msg.Payload, &c); err != nil {
+		return err
+	}
+
+	_ = peer.PC.AddICECandidate(c)
+	return nil
+}
+
+func (i *Interactor) handleSFUICE(roomID, clientID string, c webrtc.ICECandidateInit) {
+	bytes, _ := json.Marshal(c)
+
+	_ = i.out.Send(clientID, entities.Message{
+		Type:    entities.TypeCandidate,
+		From:    "sfu",
+		To:      clientID,
+		Room:    roomID,
+		Payload: bytes,
+	})
 }
 
 func (i *Interactor) join(msg entities.Message) error {
@@ -120,19 +213,24 @@ func (i *Interactor) Disconnect(clientID string) {
 			})
 		}
 	}
-
 }
 
 func (i *Interactor) relay(msg entities.Message) error {
-	if msg.From == "" {
-		return ErrMissingFrom
-	}
-	if msg.To == "" {
-		return ErrMissingTo
+	if msg.Type == entities.TypeOffer {
+		if msg.Room == "" || msg.From == "" {
+			return nil
+		}
 	}
 
-	if msg.To == msg.From {
-		return ErrSamePeer
+	if msg.Type == entities.TypeCandidate {
+		if msg.Room == "" || msg.From == "" {
+			return nil
+		}
 	}
+
+	if msg.To == "sfu" {
+		return i.HandleSFU(msg)
+	}
+
 	return i.out.Send(msg.To, msg)
 }

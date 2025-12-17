@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/stazoloto/sfu-mediaserver/internal/sfu"
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/interfaceadapters/controllers"
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/interfaceadapters/presenters"
 	"github.com/stazoloto/sfu-mediaserver/internal/signaling/interfaceadapters/repositories"
@@ -15,8 +16,9 @@ func main() {
 	roomRepo := repositories.NewRoomRepo()
 	hub := ws.NewHub()
 	presenter := presenters.NewWSPresenter(hub)
+	sfu := sfu.NewSFU()
 
-	interactor := usecase.NewInteractor(roomRepo, presenter)
+	interactor := usecase.NewInteractor(roomRepo, presenter, sfu)
 	controller := controllers.NewWSController(interactor)
 	hub.SetController(controller)
 

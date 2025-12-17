@@ -32,3 +32,10 @@ func (r *Room) ForEachPeer(fn func(*Peer)) {
 		fn(p)
 	}
 }
+
+func (r *Room) GetPeer(clientID string) *Peer {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.peers[clientID]
+}

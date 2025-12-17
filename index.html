@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SFU Test</title>
+  <style>
+    video {
+      width: 45%;
+      border: 1px solid #ccc;
+      margin: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>SFU test</h2>
+
+  <video id="local" autoplay muted playsinline></video>
+  <video id="remote" autoplay playsinline></video>
+
+  <script>
+    const clientId = prompt("client id (alice / bob)?");
+    const room = "room1";
+
+    const ws = new WebSocket(
+      "ws://localhost:8080/ws?client_id=" + clientId
+    );
+
+    let pc;
+
+    ws.onmessage = async (event) => {
+      const msg = JSON.parse(event.data);
+      console.log("WS ←", msg);
+
+      if (msg.type === "answer") {
+        await pc.setRemoteDescription(msg.payload);
+      }
+
+      if (msg.type === "candidate") {
+        try {
+          await pc.addIceCandidate(msg.payload);
+        } catch (e) {
+          console.error("addIceCandidate error", e);
+        }
+      }
+    };
+
+    ws.onopen = async () => {
+      console.log("WS connected");
+
+      // 1️⃣ JOIN ROOM
+      ws.send(JSON.stringify({
+        type: "join",
+        room: room,
+        client_id: clientId
+      }));
+
+      // 2️⃣ CREATE PEER CONNECTION
+      pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" }
+        ]
+      });
+
+      pc.ontrack = (event) => {
+        console.log("ontrack");
+        document.getElementById("remote").srcObject = event.streams[0];
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          ws.send(JSON.stringify({
+            type: "candidate",
+            to: "sfu",
+            from: clientId,
+            room: room,
+            payload: event.candidate
+          }));
+        }
+      };
+
+      // 3️⃣ GET USER MEDIA
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
+
+      document.getElementById("local").srcObject = stream;
+
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+
+      // 4️⃣ CREATE & SEND OFFER
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      ws.send(JSON.stringify({
+        type: "offer",
+        to: "sfu",
+        from: clientId,
+        room: room,
+        payload: offer
+      }));
+    };
+
+    ws.onerror = (e) => {
+      console.error("WS error", e);
+    };
+
+    ws.onclose = () => {
+      console.log("WS closed");
+    };
+  </script>
+</body>
+</html>
