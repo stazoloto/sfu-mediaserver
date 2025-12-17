@@ -36,6 +36,23 @@
         await pc.setRemoteDescription(msg.payload);
       }
 
+      if (msg.type === "offer") {
+        console.log("Got offer from SFU");
+
+        await pc.setRemoteDescription(msg.payload);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        ws.send(JSON.stringify({
+          type: "answer",
+          to: "sfu",
+          from: clientId,
+          room: room,
+          payload: answer
+        }));
+      }
+
       if (msg.type === "candidate") {
         try {
           await pc.addIceCandidate(msg.payload);
@@ -62,9 +79,24 @@
         ]
       });
 
+      const remoteStreams = new Map();
+
+
       pc.ontrack = (event) => {
-        console.log("ontrack");
-        document.getElementById("remote").srcObject = event.streams[0];
+        const stream = event.streams[0];
+
+        if (remoteStreams.has(stream.id)) {
+          return; // уже отображаем
+        }
+
+        remoteStreams.set(stream.id, true);
+
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+
+        document.getElementById("videos").appendChild(video);
       };
 
       pc.onicecandidate = (event) => {

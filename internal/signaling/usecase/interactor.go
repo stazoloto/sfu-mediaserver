@@ -31,7 +31,10 @@ func NewInteractor(repo RoomRepository, out ClientGateway, sfu *sfu.SFU) *Intera
 		sfu:   sfu,
 	}
 
-	sfu.OnICECandidate(i.handleSFUICE)
+	sfu.SetOnICECandidate(i.handleSFUICE)
+	sfu.SetSignalSender(func(to string, msg entities.Message) {
+		_ = out.Send(to, msg)
+	})
 	return i
 }
 
@@ -54,6 +57,8 @@ func (i *Interactor) HandleSFU(msg entities.Message) error {
 		return i.handleSFUOffer(msg)
 	case entities.TypeCandidate:
 		return i.handleSFUCandidate(msg)
+	case entities.TypeAnswer:
+		return i.handleSFUAnswer(msg)
 	default:
 		return nil
 	}
@@ -71,7 +76,7 @@ func (i *Interactor) handleSFUOffer(msg entities.Message) error {
 	}
 
 	// получить или созать peer в SFU
-	peer, err := i.sfu.Join(msg.Room, msg.ClientID)
+	peer, err := i.sfu.Join(msg.Room, msg.From)
 	if err != nil {
 		return err
 	}
@@ -102,7 +107,23 @@ func (i *Interactor) handleSFUOffer(msg entities.Message) error {
 		Room:    msg.Room,
 		Payload: answerBytes,
 	})
+}
 
+func (i *Interactor) handleSFUAnswer(msg entities.Message) error {
+	if msg.Room == "" || msg.From == "" {
+		return nil
+	}
+	peer := i.sfu.GetPeer(msg.Room, msg.From)
+	if peer == nil {
+		return nil
+	}
+
+	var answer webrtc.SessionDescription
+	if err := json.Unmarshal(msg.Payload, &answer); err != nil {
+		return err
+	}
+
+	return peer.PC.SetRemoteDescription(answer)
 }
 
 func (i *Interactor) handleSFUCandidate(msg entities.Message) error {
@@ -130,6 +151,10 @@ func (i *Interactor) handleSFUICE(roomID, clientID string, c webrtc.ICECandidate
 		Room:    roomID,
 		Payload: bytes,
 	})
+}
+
+func (i *Interactor) handleSignal(to string) {
+
 }
 
 func (i *Interactor) join(msg entities.Message) error {

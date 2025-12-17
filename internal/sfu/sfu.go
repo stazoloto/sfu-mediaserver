@@ -1,11 +1,13 @@
 package sfu
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"sync"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/stazoloto/sfu-mediaserver/internal/signaling/entities"
 )
 
 type SFU struct {
@@ -13,7 +15,9 @@ type SFU struct {
 	rooms map[string]*Room
 	api   *webrtc.API
 
+	// callbacks
 	onICECandidate func(roomID, clientID string, c webrtc.ICECandidateInit)
+	signalSender   func(to string, msg entities.Message)
 }
 
 func NewSFU() *SFU {
@@ -30,7 +34,17 @@ func NewSFU() *SFU {
 	}
 }
 
-func (s *SFU) OnICECandidate(fn func(roomID, clientID string, c webrtc.ICECandidateInit)) {
+func (s *SFU) SetSignalSender(fn func(to string, msg entities.Message)) {
+	s.signalSender = fn
+}
+
+func (s *SFU) sendSignal(to string, msg entities.Message) {
+	if s.signalSender != nil {
+		s.signalSender(to, msg)
+	}
+}
+
+func (s *SFU) SetOnICECandidate(fn func(roomID string, clientID string, c webrtc.ICECandidateInit)) {
 	s.onICECandidate = fn
 }
 
@@ -105,12 +119,41 @@ func (s *SFU) Join(roomID, clientID string) (*Peer, error) {
 			return
 		}
 
-		// подключаем всем отсальным пирам
+		// подключаем всем остальным пирам
 		room.ForEachPeer(func(p *Peer) {
 			if p.ClientID == clientID {
 				return
 			}
-			_, _ = p.PC.AddTrack(local)
+			sender, err := p.PC.AddTrack(local)
+			if err != nil {
+				return
+			}
+
+			go func() {
+				rtcpBuf := make([]byte, 1500)
+				for {
+					if _, _, err := sender.Read(rtcpBuf); err != nil {
+						return
+					}
+				}
+			}()
+
+			offer, err := p.PC.CreateOffer(nil)
+			if err != nil {
+				return
+			}
+			if err := p.PC.SetLocalDescription(offer); err != nil {
+				return
+			}
+
+			b, _ := json.Marshal(offer)
+			s.signalSender(p.ClientID, entities.Message{
+				Type:    entities.TypeOffer,
+				From:    "sfu",
+				To:      p.ClientID,
+				Room:    roomID,
+				Payload: b,
+			})
 		})
 
 		go func() {
