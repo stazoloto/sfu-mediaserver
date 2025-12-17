@@ -61,7 +61,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				log.Println("ws closed:", clientID)
 			} else {
-				log.Println("wa read error:", err)
+				log.Println("ws read error:", err)
 			}
 
 			if h.onDisconnect != nil {
