@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <title>SFU test</title>
+
   <style>
     body {
       display: flex;
-      gap: 20px;
+      gap: 16px;
     }
     video {
       width: 45%;
@@ -16,114 +17,172 @@
 </head>
 
 <body>
-  <!-- ЛОКАЛЬНОЕ ВИДЕО -->
-  <video id="local" autoplay muted playsinline></video>
+<video id="local" autoplay muted playsinline></video>
+<video id="remote" autoplay playsinline></video>
 
-  <!-- УДАЛЁННОЕ ВИДЕО -->
-  <video id="remote" autoplay muted playsinline></video>
+<script>
+  const clientId = prompt("client id (alice / bob)");
+  const room = "room1";
 
-  <script>
-    const clientId = prompt("client id (alice / bob)");
-    const room = "room1";
+  const ws = new WebSocket(
+          "ws://localhost:8080/ws?client_id=" + clientId
+  );
 
-    const ws = new WebSocket(
-      "ws://localhost:8080/ws?client_id=" + clientId
-    );
+  let pc;
+  let makingOffer = false;
+  const polite = true; // SFU-сценарий → клиенты polite
 
-    let pc;
+  // 🔴 очередь ICE, пришедших ДО remoteDescription
+  const pendingCandidates = [];
 
-    // ---------- WS HANDLER ----------
-    ws.onmessage = async (event) => {
-      const msg = JSON.parse(event.data);
-      console.log("WS ←", msg.type);
+  function flushCandidates() {
+    if (!pc || !pc.remoteDescription) return;
+    while (pendingCandidates.length) {
+      const c = pendingCandidates.shift();
+      pc.addIceCandidate(c).catch(e =>
+              console.error("ICE flush error", e)
+      );
+    }
+  }
 
-      // OFFER ОТ SFU (renegotiation)
-      if (msg.type === "offer") {
-        console.log("WS <- offer, state=", pc.signalingState);
+  // ---------- WS ----------
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+    console.log("WS <-", msg.type, "state=", pc?.signalingState);
 
-        if (pc.signalingState !== "stable") {
-          console.log("glare: rollback local offer");
-          await pc.setLocalDescription({ type:"rollback" })
-        }
+    // ---------- OFFER ----------
+    if (msg.type === "offer") {
+      const offer = msg.payload;
 
-        await pc.setRemoteDescription(msg.payload);
+      const offerCollision =
+              makingOffer || pc.signalingState !== "stable";
 
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
+      if (offerCollision) {
+        if (!polite) return;
+        console.log("GLARE → rollback");
+        await pc.setLocalDescription({ type: "rollback" });
+      }
 
+      await pc.setRemoteDescription(offer);
+      flushCandidates();
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      ws.send(JSON.stringify({
+        type: "answer",
+        to: "sfu",
+        from: clientId,
+        room,
+        payload: pc.localDescription
+      }));
+      return;
+    }
+
+    // ---------- ANSWER ----------
+    let lastAnswerSdp = null;
+
+    if (msg.type === "answer") {
+      const ans = msg.payload;
+      console.log("WS <- answer, state =", pc.signalingState);
+
+      // 1) если уже применяли этот же answer — игнор
+      const sdp = ans && ans.sdp ? ans.sdp : JSON.stringify(ans);
+      if (lastAnswerSdp === sdp) {
+        console.warn("Duplicate answer ignored");
+        return;
+      }
+
+      // 2) если уже стоит remote answer — игнор
+      if (pc.remoteDescription && pc.remoteDescription.type === "answer") {
+        console.warn("Remote answer already set, ignoring");
+        return;
+      }
+
+      // 3) применять answer можно только если у нас есть local offer
+      if (!pc.localDescription || pc.localDescription.type !== "offer") {
+        console.warn("No local offer, ignoring answer");
+        return;
+      }
+
+      try {
+        await pc.setRemoteDescription(ans);
+        lastAnswerSdp = sdp;
+        flushCandidates();
+      } catch (e) {
+        // если уже stable/answer установлен — просто игнорируем
+        console.warn("setRemoteDescription(answer) failed, ignoring:", e);
+      }
+      return;
+    }
+
+
+
+    // ---------- ICE ----------
+    if (msg.type === "candidate") {
+      const cand = msg.payload;
+      if (!pc.remoteDescription) {
+        pendingCandidates.push(cand);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(cand);
+      } catch (e) {
+        console.error("ICE error", e);
+      }
+      return;
+    }
+  };
+
+  // ---------- OPEN ----------
+  ws.onopen = async () => {
+    console.log("WS connected");
+
+    // JOIN
+    ws.send(JSON.stringify({
+      type: "join",
+      room,
+      client_id: clientId
+    }));
+
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    // ---------- REMOTE TRACK ----------
+    pc.ontrack = (event) => {
+      console.log("🎥 CLIENT ontrack", event.streams[0].id);
+      document.getElementById("remote").srcObject = event.streams[0];
+    };
+
+    // ---------- ICE OUT ----------
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
         ws.send(JSON.stringify({
-          type: "answer",
+          type: "candidate",
           to: "sfu",
           from: clientId,
-          room: room,
-          payload: answer
+          room,
+          payload: event.candidate
         }));
-      }
-
-      // ANSWER НА INITIAL OFFER
-      if (msg.type === "answer") {
-        console.log("✅ answer received");
-        await pc.setRemoteDescription(msg.payload);
-      }
-
-      // ICE
-      if (msg.type === "candidate") {
-        try {
-          await pc.addIceCandidate(msg.payload);
-        } catch (e) {
-          console.error("ICE error", e);
-        }
       }
     };
 
-    ws.onopen = async () => {
-      console.log("WS connected");
+    // ---------- MEDIA ----------
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true
+    });
 
-      // 1️⃣ JOIN
-      ws.send(JSON.stringify({
-        type: "join",
-        room: room,
-        client_id: clientId
-      }));
+    document.getElementById("local").srcObject = stream;
 
-      // 2️⃣ PEER CONNECTION
-      pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-      });
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
+    });
 
-      // 🔴 REMOTE TRACK
-      pc.ontrack = (event) => {
-        console.log("🎥 CLIENT ontrack", event.streams[0].id);
-        const remoteVideo = document.getElementById("remote");
-        remoteVideo.srcObject = event.streams[0];
-      };
-
-      // 🔴 ICE
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          ws.send(JSON.stringify({
-            type: "candidate",
-            to: "sfu",
-            from: clientId,
-            room: room,
-            payload: event.candidate
-          }));
-        }
-      };
-
-      // 3️⃣ GET USER MEDIA
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
-
-      document.getElementById("local").srcObject = stream;
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      // 4️⃣ INITIAL OFFER
+    // ---------- INITIAL OFFER ----------
+    try {
+      makingOffer = true;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -131,10 +190,13 @@
         type: "offer",
         to: "sfu",
         from: clientId,
-        room: room,
-        payload: offer
+        room,
+        payload: pc.localDescription
       }));
-    };
-  </script>
+    } finally {
+      makingOffer = false;
+    }
+  };
+</script>
 </body>
 </html>

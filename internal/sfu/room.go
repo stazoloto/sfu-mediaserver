@@ -14,20 +14,28 @@ type Room struct {
 
 func NewRoom() *Room {
 	return &Room{
-		peers: make(map[string]*Peer),
+		peers:  make(map[string]*Peer),
+		tracks: make([]*webrtc.TrackLocalStaticRTP, 0),
 	}
 }
 
 func (r *Room) AddPeer(p *Peer) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.peers[p.ClientID] = p
+	r.mu.Unlock()
 }
 
-func (r *Room) RemovePeer(id string) {
+func (r *Room) RemovePeer(clientID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.peers, id)
+	delete(r.peers, clientID)
+	r.mu.Unlock()
+}
+
+func (r *Room) GetPeer(clientID string) *Peer {
+	r.mu.RLock()
+	p := r.peers[clientID]
+	r.mu.RUnlock()
+	return p
 }
 
 func (r *Room) ForEachPeer(fn func(*Peer)) {
@@ -36,11 +44,4 @@ func (r *Room) ForEachPeer(fn func(*Peer)) {
 	for _, p := range r.peers {
 		fn(p)
 	}
-}
-
-func (r *Room) GetPeer(clientID string) *Peer {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.peers[clientID]
 }

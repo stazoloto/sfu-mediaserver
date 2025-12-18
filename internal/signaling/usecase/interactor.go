@@ -71,35 +71,39 @@ func (i *Interactor) handleSFUOffer(msg entities.Message) error {
 		return ErrMissingRoom
 	}
 
-	// парсинг SDP offer
 	var offer webrtc.SessionDescription
 	if err := json.Unmarshal(msg.Payload, &offer); err != nil {
 		return err
 	}
 
-	// получить или созать peer в SFU
-	peer, err := i.sfu.Join(msg.Room, msg.From)
-	if err != nil {
-		return err
+	peer := i.sfu.GetPeer(msg.Room, msg.From)
+	if peer == nil {
+		var err error
+		peer, err = i.sfu.Join(msg.Room, msg.From)
+		if err != nil {
+			return err
+		}
 	}
 
-	// установить remote description
 	if err := peer.PC.SetRemoteDescription(offer); err != nil {
 		return err
 	}
 
-	// создание answer
 	answer, err := peer.PC.CreateAnswer(nil)
 	if err != nil {
 		return err
 	}
 
-	// установить local description
 	if err := peer.PC.SetLocalDescription(answer); err != nil {
 		return err
 	}
 
-	// отправка answer клиенту
+	// 🔴 ВАЖНО
+	peer.MarkReady()
+	if peer.TakePending() {
+		i.sfu.RequestRenegotiation(msg.Room, peer)
+	}
+
 	answerBytes, _ := json.Marshal(answer)
 
 	return i.out.Send(msg.From, entities.Message{
@@ -112,29 +116,22 @@ func (i *Interactor) handleSFUOffer(msg entities.Message) error {
 }
 
 func (i *Interactor) handleSFUAnswer(msg entities.Message) error {
-	if msg.Room == "" || msg.From == "" {
-		return nil
-	}
-
-	log.Printf("SFU got ANSWER from=%s room=%s", msg.From, msg.Room)
 	peer := i.sfu.GetPeer(msg.Room, msg.From)
 	if peer == nil {
-		log.Printf("SFU answer: peer not found from=%s,room=%s", msg.From, msg.Room)
 		return nil
 	}
 
-	var answer webrtc.SessionDescription
-	if err := json.Unmarshal(msg.Payload, &answer); err != nil {
+	var ans webrtc.SessionDescription
+	if err := json.Unmarshal(msg.Payload, &ans); err != nil {
 		return err
 	}
 
-	log.Printf("SFU set remote answer for=%s", msg.From)
-
-	if err := peer.PC.SetRemoteDescription(answer); err != nil {
+	if err := peer.PC.SetRemoteDescription(ans); err != nil {
 		return err
 	}
 
-	peer.EndNegotiation()
+	i.sfu.OnAnswer(msg.Room, msg.From)
+
 	return nil
 }
 
@@ -163,10 +160,6 @@ func (i *Interactor) handleSFUICE(roomID, clientID string, c webrtc.ICECandidate
 		Room:    roomID,
 		Payload: bytes,
 	})
-}
-
-func (i *Interactor) handleSignal(to string) {
-
 }
 
 func (i *Interactor) join(msg entities.Message) error {
