@@ -3,6 +3,7 @@ package usecase
 import (
 	"encoding/json"
 	"errors"
+	"log"
 
 	"github.com/pion/webrtc/v3"
 	"github.com/stazoloto/sfu-mediaserver/internal/sfu"
@@ -33,6 +34,7 @@ func NewInteractor(repo RoomRepository, out ClientGateway, sfu *sfu.SFU) *Intera
 
 	sfu.SetOnICECandidate(i.handleSFUICE)
 	sfu.SetSignalSender(func(to string, msg entities.Message) {
+		log.Printf("SFU SIGNAL -> %s type=%s", to, msg.Type)
 		_ = out.Send(to, msg)
 	})
 	return i
@@ -113,8 +115,11 @@ func (i *Interactor) handleSFUAnswer(msg entities.Message) error {
 	if msg.Room == "" || msg.From == "" {
 		return nil
 	}
+
+	log.Printf("SFU got ANSWER from=%s room=%s", msg.From, msg.Room)
 	peer := i.sfu.GetPeer(msg.Room, msg.From)
 	if peer == nil {
+		log.Printf("SFU answer: peer not found from=%s,room=%s", msg.From, msg.Room)
 		return nil
 	}
 
@@ -123,7 +128,14 @@ func (i *Interactor) handleSFUAnswer(msg entities.Message) error {
 		return err
 	}
 
-	return peer.PC.SetRemoteDescription(answer)
+	log.Printf("SFU set remote answer for=%s", msg.From)
+
+	if err := peer.PC.SetRemoteDescription(answer); err != nil {
+		return err
+	}
+
+	peer.EndNegotiation()
+	return nil
 }
 
 func (i *Interactor) handleSFUCandidate(msg entities.Message) error {

@@ -100,75 +100,14 @@ func (s *SFU) Join(roomID, clientID string) (*Peer, error) {
 	})
 
 	// remote - трек от клиента, local - трек, который сервер будет отдавать другим
-	pc.OnTrack(func(remote *webrtc.TrackRemote, reciever *webrtc.RTPReceiver) {
-		log.Printf(
-			"SFU OnTrack: from=%s kind=%s id=%s stream=%s",
-			clientID,
-			remote.Kind(),
-			remote.ID(),
-			remote.StreamID(),
-		)
-
-		// создаем локальный трек
-		local, err := webrtc.NewTrackLocalStaticRTP(
-			remote.Codec().RTPCodecCapability,
-			remote.ID(),
-			remote.StreamID(),
-		)
-		if err != nil {
-			return
-		}
-
-		// подключаем всем остальным пирам
-		room.ForEachPeer(func(p *Peer) {
-			if p.ClientID == clientID {
-				return
-			}
-			sender, err := p.PC.AddTrack(local)
-			if err != nil {
-				return
-			}
-
-			go func() {
-				rtcpBuf := make([]byte, 1500)
-				for {
-					if _, _, err := sender.Read(rtcpBuf); err != nil {
-						return
-					}
-				}
-			}()
-
-			offer, err := p.PC.CreateOffer(nil)
-			if err != nil {
-				return
-			}
-			if err := p.PC.SetLocalDescription(offer); err != nil {
-				return
-			}
-
-			b, _ := json.Marshal(offer)
-			s.signalSender(p.ClientID, entities.Message{
-				Type:    entities.TypeOffer,
-				From:    "sfu",
-				To:      p.ClientID,
-				Room:    roomID,
-				Payload: b,
-			})
-		})
-
-		go func() {
-			buf := make([]byte, 1500)
-			for {
-				n, _, err := remote.Read(buf)
-				if err != nil {
-					return
-				}
-				if _, err = local.Write(buf[:n]); err != nil {
-					return
-				}
-			}
-		}()
+	pc.OnTrack(func(remote *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
+		s.handleOnTrack(roomID, room, peer, remote)
 	})
+
+	room.AddPeer(peer)
+
+	// подписываем нового peer на старые tracks
+	s.subscribePeerToExistingTracks(roomID, room, peer)
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		if state == webrtc.ICEConnectionState(webrtc.PeerConnectionStateDisconnected) || state == webrtc.ICEConnectionState(webrtc.PeerConnectionStateClosed) {
@@ -205,4 +144,95 @@ func (s *SFU) getOrCreateRoom(roomID string) *Room {
 	room := NewRoom()
 	s.rooms[roomID] = room
 	return room
+}
+
+func (s *SFU) handleOnTrack(roomID string, room *Room, from *Peer, remote *webrtc.TrackRemote) {
+	log.Printf("SFU OnTrack: from=%s kind-%s", from.ClientID, remote.Kind())
+
+	local, err := webrtc.NewTrackLocalStaticRTP(
+		remote.Codec().RTPCodecCapability,
+		remote.ID(),
+		remote.StreamID(),
+	)
+
+	if err != nil {
+		return
+	}
+
+	room.mu.Lock()
+	room.tracks = append(room.tracks, local)
+	room.mu.Unlock()
+
+	room.ForEachPeer(func(p *Peer) {
+		if p.ClientID == from.ClientID {
+			return
+		}
+		s.addTrackToPeer(roomID, p, local)
+		go func() {
+			buf := make([]byte, 1500)
+			for {
+				n, _, err := remote.Read(buf)
+				if err != nil {
+					return
+				}
+				if _, err = local.Write(buf[:n]); err != nil {
+					return
+				}
+			}
+		}()
+	})
+}
+
+func (s *SFU) subscribePeerToExistingTracks(roomID string, room *Room, peer *Peer) {
+	room.mu.RLock()
+	defer room.mu.RUnlock()
+
+	for _, track := range room.tracks {
+		s.addTrackToPeer(roomID, peer, track)
+	}
+}
+
+func (s *SFU) addTrackToPeer(roomID string, peer *Peer, track *webrtc.TrackLocalStaticRTP) {
+	sender, err := peer.PC.AddTrack(track)
+	if err != nil {
+		return
+	}
+
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			if _, _, err := sender.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	// renegotiation
+	if !peer.BeginNegotiation() {
+		return
+	}
+
+	if peer.PC.SignalingState() != webrtc.SignalingStateStable {
+		return
+	}
+
+	offer, err := peer.PC.CreateOffer(nil)
+	if err != nil {
+		peer.EndNegotiation()
+		return
+	}
+
+	if err := peer.PC.SetLocalDescription(offer); err != nil {
+		peer.EndNegotiation()
+		return
+	}
+
+	b, _ := json.Marshal(offer)
+	s.sendSignal(peer.ClientID, entities.Message{
+		Type:    entities.TypeOffer,
+		From:    "sfu",
+		To:      peer.ClientID,
+		Room:    roomID,
+		Payload: b,
+	})
 }

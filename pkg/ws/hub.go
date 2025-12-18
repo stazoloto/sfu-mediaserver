@@ -12,10 +12,24 @@ type Hub struct {
 	upgrader websocket.Upgrader
 
 	mu      sync.RWMutex
-	clients map[string]*websocket.Conn // clientID -> conn
+	clients map[string]*WSCLient // clientID -> conn
 
 	controller   Controller
 	onDisconnect func(clientID string)
+}
+
+type WSCLient struct {
+	id   string
+	conn *websocket.Conn
+	send chan []byte
+}
+
+func (c *WSCLient) writeLoop() {
+	for msg := range c.send {
+		if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			return
+		}
+	}
 }
 
 // NewHub создаёт WebSocket hub
@@ -24,7 +38,7 @@ func NewHub() *Hub {
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
-		clients: make(map[string]*websocket.Conn),
+		clients: make(map[string]*WSCLient),
 	}
 }
 
@@ -79,30 +93,48 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hub) register(clientID string, conn *websocket.Conn) {
+	client := &WSCLient{
+		id:   clientID,
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
 	h.mu.Lock()
-	h.clients[clientID] = conn
-	log.Println("WS CONNECT:", clientID)
+	h.clients[clientID] = client
 	h.mu.Unlock()
+
+	go client.writeLoop()
+
+	log.Println("WS CONNECT:", clientID)
 }
 
 func (h *Hub) unregister(clientID string) {
 	h.mu.Lock()
+	client := h.clients[clientID]
 	delete(h.clients, clientID)
-	log.Println("WS DISCONNECT:", clientID)
 	h.mu.Unlock()
+
+	if client != nil {
+		close(client.send)
+	}
+
+	log.Println("WS DISCONNECT:", clientID)
 }
 
 // Send отправляет raw JSON конкретному клиенту
 func (h *Hub) Send(clientID string, data []byte) error {
 	h.mu.RLock()
-	conn := h.clients[clientID]
+	client := h.clients[clientID]
 	h.mu.RUnlock()
 
-	if conn == nil {
+	if client == nil {
 		return nil
 	}
 
-	return conn.WriteMessage(websocket.TextMessage, data)
+	select {
+	case client.send <- data:
+	default:
+	}
+	return nil
 }
 
 func (h *Hub) SetOnDisconnect(fn func(string)) {

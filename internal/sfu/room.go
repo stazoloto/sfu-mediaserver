@@ -1,10 +1,15 @@
 package sfu
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/pion/webrtc/v3"
+)
 
 type Room struct {
-	mu    sync.RWMutex
-	peers map[string]*Peer
+	mu     sync.RWMutex
+	peers  map[string]*Peer
+	tracks []*webrtc.TrackLocalStaticRTP
 }
 
 func NewRoom() *Room {

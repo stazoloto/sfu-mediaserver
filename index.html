@@ -1,25 +1,29 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <title>SFU Test</title>
+  <meta charset="utf-8" />
+  <title>SFU test</title>
   <style>
+    body {
+      display: flex;
+      gap: 20px;
+    }
     video {
       width: 45%;
-      border: 1px solid #ccc;
-      margin: 5px;
+      background: black;
     }
   </style>
 </head>
 
 <body>
-  <h2>SFU test</h2>
-
+  <!-- ЛОКАЛЬНОЕ ВИДЕО -->
   <video id="local" autoplay muted playsinline></video>
-  <video id="remote" autoplay playsinline></video>
+
+  <!-- УДАЛЁННОЕ ВИДЕО -->
+  <video id="remote" autoplay muted playsinline></video>
 
   <script>
-    const clientId = prompt("client id (alice / bob)?");
+    const clientId = prompt("client id (alice / bob)");
     const room = "room1";
 
     const ws = new WebSocket(
@@ -28,16 +32,19 @@
 
     let pc;
 
+    // ---------- WS HANDLER ----------
     ws.onmessage = async (event) => {
       const msg = JSON.parse(event.data);
-      console.log("WS ←", msg);
+      console.log("WS ←", msg.type);
 
-      if (msg.type === "answer") {
-        await pc.setRemoteDescription(msg.payload);
-      }
-
+      // OFFER ОТ SFU (renegotiation)
       if (msg.type === "offer") {
-        console.log("Got offer from SFU");
+        console.log("WS <- offer, state=", pc.signalingState);
+
+        if (pc.signalingState !== "stable") {
+          console.log("glare: rollback local offer");
+          await pc.setLocalDescription({ type:"rollback" })
+        }
 
         await pc.setRemoteDescription(msg.payload);
 
@@ -53,11 +60,18 @@
         }));
       }
 
+      // ANSWER НА INITIAL OFFER
+      if (msg.type === "answer") {
+        console.log("✅ answer received");
+        await pc.setRemoteDescription(msg.payload);
+      }
+
+      // ICE
       if (msg.type === "candidate") {
         try {
           await pc.addIceCandidate(msg.payload);
         } catch (e) {
-          console.error("addIceCandidate error", e);
+          console.error("ICE error", e);
         }
       }
     };
@@ -65,40 +79,26 @@
     ws.onopen = async () => {
       console.log("WS connected");
 
-      // 1️⃣ JOIN ROOM
+      // 1️⃣ JOIN
       ws.send(JSON.stringify({
         type: "join",
         room: room,
         client_id: clientId
       }));
 
-      // 2️⃣ CREATE PEER CONNECTION
+      // 2️⃣ PEER CONNECTION
       pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" }
-        ]
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
       });
 
-      const remoteStreams = new Map();
-
-
+      // 🔴 REMOTE TRACK
       pc.ontrack = (event) => {
-        const stream = event.streams[0];
-
-        if (remoteStreams.has(stream.id)) {
-          return; // уже отображаем
-        }
-
-        remoteStreams.set(stream.id, true);
-
-        const video = document.createElement("video");
-        video.autoplay = true;
-        video.playsInline = true;
-        video.srcObject = stream;
-
-        document.getElementById("videos").appendChild(video);
+        console.log("🎥 CLIENT ontrack", event.streams[0].id);
+        const remoteVideo = document.getElementById("remote");
+        remoteVideo.srcObject = event.streams[0];
       };
 
+      // 🔴 ICE
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           ws.send(JSON.stringify({
@@ -123,7 +123,7 @@
         pc.addTrack(track, stream);
       });
 
-      // 4️⃣ CREATE & SEND OFFER
+      // 4️⃣ INITIAL OFFER
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -134,14 +134,6 @@
         room: room,
         payload: offer
       }));
-    };
-
-    ws.onerror = (e) => {
-      console.error("WS error", e);
-    };
-
-    ws.onclose = () => {
-      console.log("WS closed");
     };
   </script>
 </body>
